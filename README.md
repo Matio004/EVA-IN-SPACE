@@ -1,12 +1,14 @@
 # EVA-IN-SPACE
 Space invaders like game
 
-Mateusz - programista
-Zuzanna - grafik
+<p>Mateusz - programista</p>
+<p>Zuzanna - grafik</p>
 
-Tutorial
-Shot - SPACE or mouse button
-Shield - S
-Super - F
-Move - mouse
-F11 - full screen
+<br/>
+<details><summary>Tutorial</summary>
+<br/>Shot - SPACE or mouse button
+<br/>Shield - S
+<br/>Super - F
+<br/>Move - mouse
+<br/>F11 - full screen
+</details>
