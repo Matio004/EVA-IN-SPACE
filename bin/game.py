@@ -2,6 +2,8 @@
 from random import randint, choice, choices
 
 # Modules
+from time import time
+
 from . import settings
 from .files import load_image, load_sound, load_images, save_levels, load_saves
 from .groups import enemy_group, bullet_group, enemy_bullet_group, boss_bullet_group, shield_group, boss_group, \
@@ -130,6 +132,8 @@ class Game:
 
         # Background
         self.screen.blit(self.background_image, (0, 0))
+
+        self.prev_time = time()
 
     def check_collisions(self):
         # Collisions
@@ -288,6 +292,9 @@ class Game:
         return None
 
     def run(self):
+        dt = time()-self.prev_time
+        self.prev_time = time()
+
         # Game loop
         if self.player.hp > 0 and (self.kills < self.level.kills or not self.boss_killed):
             self.generate_enemies()  # Enemy generator
@@ -348,7 +355,7 @@ class Game:
 
             # Draw all entities
             all_group.clear(self.screen, self.background_image)
-            all_group.update(player=self.player)
+            all_group.update(player=self.player, dt=dt)
 
             dirty = all_group.draw(self.screen)
             pygame.display.update(dirty)

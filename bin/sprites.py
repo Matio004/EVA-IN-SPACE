@@ -4,6 +4,8 @@ from time import time
 import pygame
 
 # Own module
+from pygame.math import Vector2
+
 from .settings import screen_width, screen_height, screen_rect
 from .groups import enemy_group, enemy_bullet_group, boss_bullet_group, boss_group,\
     boss_shield_group, all_group
@@ -78,7 +80,7 @@ class Bonus(pygame.sprite.Sprite):
 # Engines
 class Engine(pygame.sprite.Sprite):
     frame_index = 0
-    animation_speed: float = .45
+    animation_speed: float = 16  # .45
     containers = all_group,
 
     def __init__(self, actor, x: float, y: float):
@@ -91,25 +93,27 @@ class Engine(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(self.actor.rect.x - self.x, self.actor.rect.centery - self.y))
 
     def update(self, *args, **kwargs) -> None:
-        self.animate()
+        self.animate(kwargs.get('dt'))
 
         if not self.actor.alive():
             self.kill()
 
         self.rect.center = self.actor.rect.x - self.x, self.actor.rect.centery - self.y
 
-    def animate(self):
+    def animate(self, dt):
         # Index error
         if self.frame_index >= len(self.frames):
             self.frame_index = 0
 
         self.image = self.frames[int(self.frame_index)]  # change image
-        self.frame_index += self.animation_speed  # next image
+        self.frame_index += self.animation_speed*dt  # next image
 
 
 # Player
 class Player(pygame.sprite.Sprite):
-    bullet_speed = 15  # 15
+    bullet_speed = 700  # 600  # 15
+    super_speed = 400
+    super_size = 4
     max_hp = 100
     hp = max_hp  # 100
 
@@ -146,7 +150,7 @@ class Player(pygame.sprite.Sprite):
         return Shield(self, containers)
 
     def create_superpower(self, containers):
-        return Superpower(4, self.rect.x, self.rect.y, 10, containers)
+        return Superpower(self.super_size, self.rect.x, self.rect.y, self.super_speed, containers)
 
     # Check powers
     def check_powers(self):
@@ -183,8 +187,14 @@ class Bullet(pygame.sprite.Sprite):
 
         self.direction = direction
 
+        self.pos = Vector2(self.rect.center)
+
     def update(self, *args, **kwargs) -> None:
-        self.rect[0] += self.direction
+        dt = kwargs.get('dt')
+
+        self.pos.x += self.direction*dt
+
+        self.rect[0] = round(self.pos.x)  #+= self.direction
         if self.rect[0] >= screen_width and self.direction > 0:
             self.kill()
         if self.rect[0] <= 0 and self.direction < 0:
@@ -195,6 +205,9 @@ class Bullet(pygame.sprite.Sprite):
 class Shield(pygame.sprite.Sprite):
     hp = 100
 
+    frame_index = 0
+    animation_speed: float = 16
+
     def __init__(self, sprite, containers):
         super().__init__(*containers)
         self.sprite = sprite
@@ -202,8 +215,15 @@ class Shield(pygame.sprite.Sprite):
         size = max(self.sprite.rect.size[0], self.sprite.rect.size[1]) * 2
         shield_size = size, size
 
-        self.image = pygame.transform.scale(load_image('images/shield.png') if type(self.sprite) == Player
-                                            else load_image('images/boss_shield.png'), shield_size)
+        self.frames = [pygame.transform.scale(load_image('images/shield.png') if type(self.sprite) == Player
+                                              else load_image('images/boss_shield.png'), shield_size)]
+        self.frames.extend([
+            pygame.transform.flip(self.frames[0], True, False),
+            pygame.transform.flip(self.frames[0], True, True),
+            pygame.transform.flip(self.frames[0], False, True)
+                            ])
+
+        self.image = self.frames[0]
         self.rect = self.image.get_rect(center=self.sprite.rect.center)
 
         self.default_hp = self.hp
@@ -213,19 +233,23 @@ class Shield(pygame.sprite.Sprite):
             self.kill()
         self.rect.center = self.sprite.rect.center
 
-        self.animate()
+        self.animate(kwargs.get('dt'))
 
-    def animate(self):
-        flip_x = choice((True, False))
-        flip_y = choice((True, False))
-        self.image = pygame.transform.flip(self.image, flip_x, flip_y)
+    def animate(self, dt):
+        # Index error
+        if self.frame_index >= len(self.frames):
+            self.frame_index = 0
+
+        self.image = self.frames[int(self.frame_index)]  # change image
+        self.frame_index += self.animation_speed * dt  # next image
 
 
 # Enemy
 class Enemy(pygame.sprite.Sprite):
     # Presets
-    speed = 2
-    bullet_speed = -8  # -8
+    speed = 80
+    forward = 4000
+    bullet_speed = -320  # -8
     hp = 2
     facing = choice((-1, 1))
     max_bullet = 7  # 7
@@ -246,13 +270,25 @@ class Enemy(pygame.sprite.Sprite):
         # Others
         self.bullet_image = pygame.transform.rotate(load_image('images/bullet/bullet0.png'), 90)
 
+        self.pos = Vector2(self.rect.center)
+
     def update(self, *args, **kwargs) -> None:
+        dt = kwargs.get('dt')
+
         self.bullet_generator()
 
-        self.rect.move_ip(0, self.facing * self.speed)
+        self.pos.y += self.facing * self.speed * dt
+        self.rect.y = round(self.pos.y)
+
         if not screen_rect.contains(self):
-            self.rect.centerx -= 100
+            self.pos.x = self.rect.x - self.forward * dt
+            self.rect.x = round(self.pos.x)
+
             self.facing = -self.facing
+
+            self.pos.y += self.facing * self.speed * dt
+            self.rect.y = round(self.pos.y)
+
         if self.rect.centerx <= 0:
             self.rect.centerx = randint(600, screen_width - 100)
 
@@ -275,8 +311,9 @@ class Enemy(pygame.sprite.Sprite):
 class Boss(pygame.sprite.Sprite):
     # Presets
     facing = choice((-1, 1))
-    speed = 2
-    bullet_speed = -10  # -10
+    speed = 80
+    forward = 4000
+    bullet_speed = -400  # -10
     hp = 2
 
     # Shield
@@ -298,13 +335,25 @@ class Boss(pygame.sprite.Sprite):
         # Others
         self.bullet_image = pygame.transform.rotate(load_image('images/bullet/bullet0.png'), 90)
 
+        self.pos = Vector2(self.rect.center)
+
     def update(self, *args, **kwargs) -> None:
+        dt = kwargs.get('dt')
+
         self.bullet_generator()
         # Move
-        self.rect.move_ip(0, self.facing * self.speed)
+        self.pos.y += self.facing * self.speed * dt
+        self.rect.y = round(self.pos.y)
+
         if not screen_rect.contains(self):
-            self.rect.centerx -= 100
+            self.pos.x = self.rect.x - self.forward * dt
+            self.rect.x = round(self.pos.x)
+
             self.facing = -self.facing
+
+            self.pos.y += self.facing * self.speed * dt
+            self.rect.y = round(self.pos.y)
+
         if self.rect.centerx <= 0:
             self.rect.centerx = randint(600, screen_width - 100)
 
@@ -323,7 +372,7 @@ class Boss(pygame.sprite.Sprite):
 
         # Boss powers increase
         if self.shield_power < self.max_shield and len(boss_shield_group) == 0:
-            self.shield_power += 0.05
+            self.shield_power += 2 * dt
 
         # Check powers
         if self.shield_power > self.max_shield:
@@ -345,7 +394,7 @@ class Boom(pygame.sprite.Sprite):
     # Attributes
     default_life = 12
     animation_frames = 3
-    animation_speed = .6
+    animation_speed = 21  # .6
     # Pygame
     containers = all_group,
 
@@ -359,16 +408,16 @@ class Boom(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=actor.rect.center)
 
     def update(self, *args, **kwargs) -> None:
-        self.default_life -= self.animation_speed
+        self.default_life -= self.animation_speed*kwargs.get('dt')
         self.image = self.frames[int(self.default_life) // self.animation_frames % 2]
         if self.default_life <= 0:
             self.kill()
 
 
-# Super power
+# Superpower
 class Superpower(pygame.sprite.Sprite):
     frame_index = 0
-    animation_speed: float = .3
+    animation_speed: float = 11  # .3
 
     def __init__(self, size: int, pos_x: float, pos_y: float, speed: float, containers):
         super().__init__(*containers)
@@ -381,21 +430,26 @@ class Superpower(pygame.sprite.Sprite):
 
         self.speed = speed
 
-    def update(self, *args, **kwargs) -> None:
-        self.animate()
+        self.pos = Vector2(self.rect.center)
 
-        if self.rect.centerx <= screen_width:
-            self.rect.centerx += self.speed
+    def update(self, *args, **kwargs) -> None:
+        dt = kwargs.get('dt')
+
+        self.animate(dt)
+
+        self.pos.x += self.speed * dt
+        self.rect.x = round(self.pos.x)
+
         if self.rect.centerx > screen_width:
             self.kill()
 
-    def animate(self):
+    def animate(self, dt):
         # Index error
         if self.frame_index > len(self.frames):
             self.frame_index = 0
 
         self.image = self.frames[int(self.frame_index)]  # Change image
-        self.frame_index += self.animation_speed  # Next image
+        self.frame_index += self.animation_speed * dt  # Next image
 
 
 # Score
